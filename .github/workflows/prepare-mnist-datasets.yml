@@ -1,9 +1,7 @@
 name: Prepare MNIST datasets
 
 on:
-  push:
-    paths:
-      - '.github/workflows/prepare-mnist-datasets.yml'
+  pull_request:
   workflow_dispatch:
 
 permissions:

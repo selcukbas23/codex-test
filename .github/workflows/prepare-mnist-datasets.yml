@@ -1,0 +1,72 @@
+name: Prepare MNIST datasets
+
+on:
+  push:
+    paths:
+      - '.github/workflows/prepare-mnist-datasets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OUT_DIR: qdgm_datasets
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download MNIST and Fashion-MNIST IDX files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT_DIR/MNIST/raw" "$OUT_DIR/FashionMNIST/raw"
+
+          MNIST_BASE='https://storage.googleapis.com/cvdf-datasets/mnist'
+          FASHION_BASE='https://fashion-mnist.s3-website.eu-central-1.amazonaws.com'
+
+          for f in train-images-idx3-ubyte.gz train-labels-idx1-ubyte.gz t10k-images-idx3-ubyte.gz t10k-labels-idx1-ubyte.gz; do
+            curl --fail --location --retry 5 --retry-delay 2 "$MNIST_BASE/$f" -o "$OUT_DIR/MNIST/raw/$f"
+            curl --fail --location --retry 5 --retry-delay 2 "$FASHION_BASE/$f" -o "$OUT_DIR/FashionMNIST/raw/$f"
+          done
+
+      - name: Verify checksums and dataset headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'f68b3c2dcbeaaa9fbdd348bbdeb94873  qdgm_datasets/MNIST/raw/train-images-idx3-ubyte.gz' | md5sum -c -
+          echo 'd53e105ee54ea40749a09fcbcd1e9432  qdgm_datasets/MNIST/raw/train-labels-idx1-ubyte.gz' | md5sum -c -
+          echo '9fb629c4189551a2d022fa330f9573f3  qdgm_datasets/MNIST/raw/t10k-images-idx3-ubyte.gz' | md5sum -c -
+          echo 'ec29112dd5afa0611ce80d1b7f02629c  qdgm_datasets/MNIST/raw/t10k-labels-idx1-ubyte.gz' | md5sum -c -
+          echo '8d4fb7e6c68d591d4c3dfef9ec88bf0d  qdgm_datasets/FashionMNIST/raw/train-images-idx3-ubyte.gz' | md5sum -c -
+          echo '25c81989df183df01b3e8a0aad5dffbe  qdgm_datasets/FashionMNIST/raw/train-labels-idx1-ubyte.gz' | md5sum -c -
+          echo 'bef4ecab320f06d8554ea6380940ec79  qdgm_datasets/FashionMNIST/raw/t10k-images-idx3-ubyte.gz' | md5sum -c -
+          echo 'bb300cfdad3c16e7a12a480ee83cd310  qdgm_datasets/FashionMNIST/raw/t10k-labels-idx1-ubyte.gz' | md5sum -c -
+
+          python - <<'PY'
+          import gzip, struct
+          from pathlib import Path
+          for dataset in ('MNIST', 'FashionMNIST'):
+              root = Path('qdgm_datasets') / dataset / 'raw'
+              with gzip.open(root / 'train-images-idx3-ubyte.gz', 'rb') as f:
+                  magic, n, rows, cols = struct.unpack('>IIII', f.read(16))
+              with gzip.open(root / 'train-labels-idx1-ubyte.gz', 'rb') as f:
+                  lmagic, ln = struct.unpack('>II', f.read(8))
+              assert (magic, rows, cols, n, lmagic, ln) == (2051, 28, 28, 60000, 2049, 60000)
+              with gzip.open(root / 't10k-images-idx3-ubyte.gz', 'rb') as f:
+                  magic, n, rows, cols = struct.unpack('>IIII', f.read(16))
+              with gzip.open(root / 't10k-labels-idx1-ubyte.gz', 'rb') as f:
+                  lmagic, ln = struct.unpack('>II', f.read(8))
+              assert (magic, rows, cols, n, lmagic, ln) == (2051, 28, 28, 10000, 2049, 10000)
+              print(dataset, 'verified')
+          PY
+
+      - name: Upload verified datasets
+        uses: actions/upload-artifact@v4
+        with:
+          name: qdgm-mnist-fashion-idx
+          path: qdgm_datasets
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error

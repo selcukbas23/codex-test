@@ -1,0 +1,1 @@
+Trigger MNIST dataset preparation workflow.

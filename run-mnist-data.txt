@@ -1,0 +1,1 @@
+Trigger verified MNIST and Fashion-MNIST dataset preparation, attempt 2.
